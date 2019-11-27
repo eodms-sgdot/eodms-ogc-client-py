@@ -96,8 +96,8 @@ def main():
             '&coverageId=%s&CollectionId=%s' % (rec_id, collection_id)
     
     # Create a session with authentication
-    username = 'keballan'
-    password = base64.b64decode("TWJWbUNoMTIj").decode("utf-8")
+    username = '########'
+    password = base64.b64decode("########").decode("utf-8")
     
     session = requests.Session()
     session.auth = (username, password)
