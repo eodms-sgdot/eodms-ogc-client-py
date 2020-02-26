@@ -1,34 +1,43 @@
 # eodms-ogc-client-py
 
-End-to-End Order Example (using Python)
+## End-to-End Order Example (using Python)
+
 The following steps use Python to search the EODMS_Catalog CSW and WCS services to order a Radarsat-1 image from the EODMS.
 
 For this example, the following restrictions will be place on the query:
 
-A bounding box surrounding the City of Ottawa city limits with coordinates:
-lower corner: -76.3556 44.9617
-upper corner: -75.2466 45.5371
-All dates before to March 29, 2013 as this was the last day Radarsat-1 transmitted data
-Python Packages
+* A bounding box surrounding the City of Ottawa city limits with coordinates:<br>
+<code>lower corner: -76.3556 44.9617</code><br>
+<code>upper corner: -75.2466 45.5371</code><br>
+
+* All dates before to March 29, 2013 as this was the last day Radarsat-1 transmitted data
+
+## Python Packages
+
 The only Python package that needs to be installed prior running these scripts is the Requests package (https://realpython.com/python-requests/). It can be installed by running the command pip install requests.
 
-GetRecords POST Request
+## GetRecords POST Request
+
 SET VARIABLES
 
 First step is to set the input parameters (restrictions listed above) for the GetRecords request.
 
 Python code:
 
+```python
 # Set specific parameters
 lower_corner = '-76.3556 44.9617'
 upper_corner = '-75.2466 45.5371'
 end_date = '2013-03-29Z'
+```
+
 CREATE REQUEST XML
 
 Next, create the XML POST GetRecords request with the above variables. The request tells the CSW to return the first 15 records based on these variables (or search criteria). NOTE: To change the number of records returned, change the maxRecords attribute in the XML below to the desired value.
 
 GetRecords POST request example:
 
+```
 <?xml version="1.0" encoding="UTF-8"?>
 <csw:GetRecords service='CSW' version='2.0.2'
     maxRecords='15'
@@ -47,34 +56,38 @@ GetRecords POST request example:
     xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
     http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
     <csw:Query typeNames='csw:Record'>
-        <csw:ElementSetName typeNames='csw:Record'>full</csw:elementsetname>
+        <csw:ElementSetName typeNames='csw:Record'>full</csw:ElementSetName>
         <csw:Constraint version="1.1.0">
             <ogc:Filter>
                 <ogc:And>
                     <ogc:PropertyIsLessThan>
-                        <ogc:PropertyName>dc:date</ogc:propertyname>
-                        <ogc:Literal>%s</ogc:literal>
-                    </ogc:propertyislessthan>
+                        <ogc:PropertyName>dc:date</ogc:PropertyName>
+                        <ogc:Literal>%s</ogc:Literal>
+                    </ogc:PropertyIsLessThan>
                     <ogc:PropertyIsLike escapeChar='\\' singleChar='?' 
                         wildCard='*'>
-                        <ogc:PropertyName>dc:title</ogc:propertyname>
-                        <ogc:Literal>*</ogc:literal>
-                    </ogc:propertyislike>
+                        <ogc:PropertyName>dc:title</ogc:PropertyName>
+                        <ogc:Literal>*</ogc:Literal>
+                    </ogc:PropertyIsLike>
                     <ogc:BBOX>
-                        <ogc:PropertyName>ows:BoundingBox</ogc:propertyname>
+                        <ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
                         <gml:Envelope>
-                            <gml:lowerCorner>%s</gml:lowercorner>
-                            <gml:upperCorner>%s</gml:uppercorner>
-                        </gml:envelope>
-                    </ogc:bbox>
-                </ogc:and>
-         </ogc:filter>
-        </csw:constraint>
-    </csw:query>
-</csw:getrecords>
+                            <gml:lowerCorner>%s</gml:lowerCorner>
+                            <gml:upperCorner>%s</gml:upperCorner>
+                        </gml:Envelope>
+                    </ogc:BBOX>
+                </ogc:And>
+         </ogc:Filter>
+        </csw:Constraint>
+    </csw:Query>
+</csw:GetRecords>
+```
+
 Python code of request:
 
+```python
 # Submit a GetRecords to the CSW
+
 post_xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <csw:GetRecords service='CSW' version='2.0.2'
     maxRecords='15'
@@ -93,41 +106,47 @@ post_xml = '''<?xml version="1.0" encoding="UTF-8"?>
     xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
     http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
     <csw:Query typeNames='csw:Record'>
-        <csw:ElementSetName typeNames='csw:Record'>full</csw:elementsetname>
+        <csw:ElementSetName typeNames='csw:Record'>full</csw:ElementSetName>
         <csw:Constraint version="1.1.0">
             <ogc:Filter>
                 <ogc:And>
                     <ogc:PropertyIsLessThan>
-                        <ogc:PropertyName>dc:date</ogc:propertyname>
-                        <ogc:Literal>%s</ogc:literal>
-                    </ogc:propertyislessthan>
+                        <ogc:PropertyName>dc:date</ogc:PropertyName>
+                        <ogc:Literal>%s</ogc:Literal>
+                    </ogc:PropertyIsLessThan>
                     <ogc:PropertyIsLike escapeChar='\\' singleChar='?' 
                         wildCard='*'>
-                        <ogc:PropertyName>dc:title</ogc:propertyname>
-                        <ogc:Literal>*</ogc:literal>
-                    </ogc:propertyislike>
+                        <ogc:PropertyName>dc:title</ogc:PropertyName>
+                        <ogc:Literal>*</ogc:Literal>
+                    </ogc:PropertyIsLike>
                     <ogc:BBOX>
-                        <ogc:PropertyName>ows:BoundingBox</ogc:propertyname>
+                        <ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
                         <gml:Envelope>
-                            <gml:lowerCorner>%s</gml:lowercorner>
-                            <gml:upperCorner>%s</gml:uppercorner>
-                        </gml:envelope>
-                    </ogc:bbox>
-                </ogc:and>
-         </ogc:filter>
-        </csw:constraint>
-    </csw:query>
-</csw:getrecords>''' % (end_date, lower_corner, upper_corner)
+                            <gml:lowerCorner>%s</gml:lowerCorner>
+                            <gml:upperCorner>%s</gml:upperCorner>
+                        </gml:Envelope>
+                    </ogc:BBOX>
+                </ogc:And>
+         </ogc:Filter>
+        </csw:Constraint>
+    </csw:Query>
+</csw:GetRecords>''' % (end_date, lower_corner, upper_corner)
+```
+
 SEND THE REQUEST
 
 The next step is to send the request to the WCS URL. In Python, use the requests object to send a POST request:
 
+```python
 csw_url = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca/MetaManagerCSW' \
             '/csw/eodms_catalog'
 headers = {'Content-Type':'application/xml'}
 csw_r = requests.post(csw_url, data=post_xml)
+```
+
 The GetRecords response will contain all the records up to the maxRecords value (in this case the first 15). The following HTTP response will be returned from the CSW:
 
+```
 <?xml version="1.0" encoding="UTF-8"?>
 <GetRecordsResponse xmlns="http://www.opengis.net/cat/csw/2.0.2">
     <SearchStatus timestamp="2019-11-22T04:11:02-05:00"/>
@@ -216,10 +235,10 @@ The GetRecords response will contain all the records up to the maxRecords value 
                 www.isotc211.org/2005/gmd&amp;Id=1508208&amp;outputFormat=text/html
             </dc:source>
             <ows:BoundingBox>
-                <ows:LowerCorner>-76.275153 45.191208</ows:lowercorner>
-                <ows:UpperCorner>-75.444661 45.739692</ows:uppercorner>
-            </ows:boundingbox>
-        </csw:record>
+                <ows:LowerCorner>-76.275153 45.191208</ows:LowerCorner>
+                <ows:UpperCorner>-75.444661 45.739692</ows:UpperCorner>
+            </ows:BoundingBox>
+        </csw:Record>
         <csw:Record xmlns:csw="http://www.opengis.net/cat/csw/2.0.2" 
             xmlns:ows="http://www.opengis.net/ows" 
             xmlns:dct="http://purl.org/dc/terms/" 
@@ -227,40 +246,53 @@ The GetRecords response will contain all the records up to the maxRecords value 
             .
             .
             .
-        </csw:record>
+        </csw:Record>
         .
         .
         .
-    </searchresults>
-</getrecordsresponse>
+    </SearchResults>
+</GetRecordsResponse>
+```
+
 EXTRACT RECORD ID AND COLLECTION ID FROM RESPONSE
 
-Using the GetRecords HTTP response, the record ID and the collection ID can be extracted. The record ID is taken from <dc:identifier> in the response. The collection ID can be extracted by parsing the URL in the <dct:references>. The next step in the script is to convert the XML response into an ElementTree and get the XML element of the first record (or remove the break and add each rec_element to a list to go through each record in the response):
+Using the GetRecords HTTP response, the record ID and the collection ID can be extracted. The record ID is taken from ```<dc:identifier>``` in the response. The collection ID can be extracted by parsing the URL in the ```<dct:references>```. The next step in the script is to convert the XML response into an ElementTree and get the XML element of the first record (or remove the ```break``` and add each ```rec_element``` to a list to go through each record in the response):
 
+```python
 record_tag = '{http://www.opengis.net/cat/csw/2.0.2}Record'
 for child in root.iter('*'):
     if child.find(record_tag):
         rec_element = child.find(record_tag)
         break
-Using the record element, locate the <dc:identifier> element and get its text:
+```
 
+Using the record element, locate the ```<dc:identifier>``` element and get its text:
+
+```python
 # Get the ID of the first record
 id_tag = '{http://purl.org/dc/elements/1.1/}identifier'
 id_el = rec_element.find(id_tag)
 rec_id = id_el.text
-Next, locate the <dct:references> in the record element and parse the URL from it:
+```
 
+Next, locate the ```<dct:references>``` in the record element and parse the URL from it:
+
+```python
 url_parse = urlparse(ref_url)
 url_query = url_parse.query
 query_items = {u.split('=')[0]:u.split('=')[1] for u in url_query.split('&')}
 collection_id = query_items['collectionId']
-DescribeCoverage Request
+```
+
+## DescribeCoverage Request
+
 The DescribeCoverage feature can be sent as a POST or GET request.
 
-The URL for the DescribeCoverage GET request is: https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/services/WESOrder/wcs?SERVICE=WCS&version=2.0.1&REQUEST=DescribeCoverage&coverageId=1508208&CollectionId=Radarsat1
+The URL for the ```DescribeCoverage``` GET request is: https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/services/WESOrder/wcs?SERVICE=WCS&version=2.0.1&REQUEST=DescribeCoverage&coverageId=1508208&CollectionId=Radarsat1
 
 The POST request would be:
 
+```
 <?xml version="1.0" encoding="UTF-8"?>
 <wcs:DescribeCoverage service="WCS" version="2.0.1"
     xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
@@ -270,19 +302,28 @@ The POST request would be:
     xmlns:wcs="http://www.opengis.net/wcs/2.0">
     <wcs:CoverageId>Radarsat1--5117806</wcs:coverageid>
 </wcs:describecoverage>
+```
+
 For the Python scripts, the GET URL will be used. The code for the DescribeCoverage GET URL is:
 
+```python
 # Submit a DescribeCoverage GET request to the WCS using the record and collection IDs
 wcs_url = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/services/WESOrder/' \
     'wcs?SERVICE=WCS&version=2.0.1&REQUEST=DescribeCoverage' \
     '&coverageId=%s&CollectionId=%s' % (rec_id, collection_id)
+```
+    
 Using the WCS service requires a user account. To send an authenticated request in Python, a session containing the username and password has to be created first. The following code creates a session with username and password and then sends the GET request through the session:
 
+```python
 session = requests.Session()
 session.auth = (username, password)
 wcs_desccov = session.get(url=wcs_url)
+```
+
 Next, the DescribeCoverage will send back the following response if the request was successful:
 
+```
 <wcs:CoverageDescriptions xmlns:wcs="http://www.opengis.net/wcs/2.0">
     <wcs:CoverageDescription xmlns:gml="http://www.opengis.net/gml/3.2" 
         gml:id="Cd5a023dc-0003-4ddf-b5cc-5d2e533eac05">
@@ -362,10 +403,34 @@ Next, the DescribeCoverage will send back the following response if the request 
         </wcs:serviceparameters>
     </wcs:coveragedescription>
 </wcs:coveragedescriptions>
-GetCoverage Request
-If the request was successful, the status code of 200 will be returned with the request and the GetCoverage operation can be sent to the WCS. A GET request similar to the DescribeCoverage can be sent to the WCS (adding format=applicationgml+xml to the URL query).
+```
 
-In this case, a POST request is used. For the POST request, the CoverageId must be in the format of <collection></collection>--<record_id></record_id> so in this case the CoverageId is Radarsat1&amp;&#35;45&#59;&amp;&#35;45&#59;1508208:
+## GetCoverage Request
 
-wcs_getcov &amp;&#35;61&#59; session.post(url&amp;&#35;61&#59;wcs_url, data&amp;&#35;61&#59;getcov_post)
+If the request was successful, the status code of 200 will be returned with the request and the ```GetCoverage``` operation can be sent to the WCS. A GET request similar to the DescribeCoverage can be sent to the WCS (adding ```format=applicationgml+xml``` to the URL query).
+
+In this case, a POST request is used. For the POST request, the ```CoverageId``` must be in the format of ```<collection></collection>--<record_id></record_id>``` so in this case the CoverageId is ```Radarsat1--1508208```:
+
+```python
+if wcs_desccov.status_code == 200:
+    
+    cov_id = '%s--%s' % (collection_id, rec_id)
+
+    # Submit a GetCoverage to the WCS
+    getcov_post = '''<wcs:GetCoverage
+    xmlns:wos="http://schema.compusult.net/services/2.6.1/WESOrder"
+    xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+    xsi:schemaLocation="http://www.opengis.net/wcs/2.0
+    http://schemas.opengis.net/wcs/2.0/wcsAll.xsd"
+    xmlns="http://www.opengis.net/wcs/2.0"
+    xmlns:wcs="http://www.opengis.net/wcs/2.0"
+    xmlns:wes="http://schema.compusult.net/services/2.6.1/WESOrder/wcs"
+    service="WCS" version="2.0.1">
+    <wcs:CoverageId>%s</wcs:CoverageId>
+    <wcs:format>application/gml+xml</wcs:format>
+</wcs:GetCoverage>''' % cov_id
+
+wcs_getcov = session.post(url=wcs_url, data=getcov_post)</pre>
+```
+
 Once the request has been sent, the user will receive an “EODMS Image Request Submitted Notification” email letting them know that their request has been submitted. Shortly after receiving this email, the user should then receive another email called “EODMS Image Request Delivery Notification” with download links for the specific image.
