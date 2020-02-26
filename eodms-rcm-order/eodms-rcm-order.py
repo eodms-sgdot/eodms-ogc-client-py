@@ -750,8 +750,7 @@ def main():
     parser = argparse.ArgumentParser(description='Order RCM products.')
     parser.add_argument('-m', '--maximum', help='The maximum number of ' \
                         'orders to complete. The process will end once this ' \
-                        'number of images has been ordered or if the total ' \
-                        'time has been reached, whichever comes first.')
+                        'number of images has been ordered.')
     parser.add_argument('-u', '--username', help='The username of the ' \
                         'account used for autentication.')
     parser.add_argument('-p', '--password', help='The password of the ' \
