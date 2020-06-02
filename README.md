@@ -146,7 +146,7 @@ csw_r = requests.post(csw_url, data=post_xml)
 
 The GetRecords response will contain all the records up to the maxRecords value (in this case the first 15). The following HTTP response will be returned from the CSW:
 
-```
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <GetRecordsResponse xmlns="http://www.opengis.net/cat/csw/2.0.2">
     <SearchStatus timestamp="2019-11-22T04:11:02-05:00"/>
@@ -292,7 +292,7 @@ The URL for the ```DescribeCoverage``` GET request is: https://www.eodms-sgdot.n
 
 The POST request would be:
 
-```
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <wcs:DescribeCoverage service="WCS" version="2.0.1"
     xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
@@ -323,7 +323,7 @@ wcs_desccov = session.get(url=wcs_url)
 
 Next, the DescribeCoverage will send back the following response if the request was successful:
 
-```
+```xml
 <wcs:CoverageDescriptions xmlns:wcs="http://www.opengis.net/wcs/2.0">
     <wcs:CoverageDescription xmlns:gml="http://www.opengis.net/gml/3.2" 
         gml:id="Cd5a023dc-0003-4ddf-b5cc-5d2e533eac05">
