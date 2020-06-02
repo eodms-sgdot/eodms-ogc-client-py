@@ -230,8 +230,8 @@ def get_cov(user, password, rec_id, collection_id, session=None,
     
     return except_el
 
-def get_csw_postxml(cur_val, user, password, id=None, coordinates='', 
-                    max_recs=150):
+def get_csw_postxml(cur_val, id=None, coordinates='', 
+                    max_recs=150, start=None, end=None):
     """
     Gets the POST XML for the CSW.
     
@@ -280,81 +280,101 @@ def get_csw_postxml(cur_val, user, password, id=None, coordinates='',
         
         # Create the bbox XML element
         bbox_str = '''<ogc:BBOX>
-                            <ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
-                            <gml:Envelope>
-                                <gml:lowerCorner>%s</gml:lowerCorner>
-                                <gml:upperCorner>%s</gml:upperCorner>
-                            </gml:Envelope>
-                        </ogc:BBOX>''' % (lower_corner, upper_corner)
+                    <ogc:PropertyName>apiso:BoundingBox</ogc:PropertyName>
+                    <gml:Envelope>
+                        <gml:lowerCorner>%s</gml:lowerCorner>
+                        <gml:upperCorner>%s</gml:upperCorner>
+                    </gml:Envelope>
+                </ogc:BBOX>''' % (lower_corner, upper_corner)
                         
     srch_str = '*'
     
     if id is None or id == '':
         # Create filter for the title
         filter = '''<ogc:PropertyIsLike escapeChar='\\' singleChar='?' wildCard='*'>
-                                <ogc:PropertyName>dc:title</ogc:PropertyName>
-                                <ogc:Literal>%s</ogc:Literal>
-                            </ogc:PropertyIsLike>''' % srch_str
+                        <ogc:PropertyName>apiso:title</ogc:PropertyName>
+                        <ogc:Literal>%s</ogc:Literal>
+                    </ogc:PropertyIsLike>''' % srch_str
     else:
         # Create filter for the specific ID
         filter = '''<ogc:PropertyIsEqualTo>
-                                <ogc:PropertyName>dc:identifier</ogc:PropertyName>
-                                <ogc:Literal>%s</ogc:Literal>
-                            </ogc:PropertyIsEqualTo>''' % id
+                        <ogc:PropertyName>apiso:identifier</ogc:PropertyName>
+                        <ogc:Literal>%s</ogc:Literal>
+                    </ogc:PropertyIsEqualTo>''' % id
+    
+    start_filter = ''                
+    if start is not None and not start == '':
+        start_filter = '''<ogc:PropertyIsGreaterThanOrEqualTo>
+						<ogc:PropertyName>apiso:TempExtent_begin</ogc:PropertyName>
+	                    <ogc:Literal>%s</ogc:Literal>
+					</ogc:PropertyIsGreaterThanOrEqualTo>''' % start
+                    
+    end_filter = ''                
+    if end is not None and not end == '':
+        end_filter = '''<ogc:PropertyIsLessThanOrEqualTo>
+						<ogc:PropertyName>apiso:TempExtent_end</ogc:PropertyName>
+	                    <ogc:Literal>%s</ogc:Literal>
+					</ogc:PropertyIsLessThanOrEqualTo>''' % end
     
     # Get the authentication from the access.csv file
     #username, password = get_auth(user)
     
-    # Build the SOAP start for authentication
-    soap_header = '''<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
-    <soapenv:Header>
-        <wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasisopen.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
-            <wsse:UsernameToken xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-                <wsse:Username>%s</wsse:Username>
-                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">%s</wsse:Password>
-            </wsse:UsernameToken>
-        </wsse:Security>
-    </soapenv:Header>
-    <soapenv:Body>
-        ''' % (user, password)
+    # # Build the SOAP start for authentication
+    # soap_header = '''<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+    # <soapenv:Header>
+        # <wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasisopen.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+            # <wsse:UsernameToken xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+                # <wsse:Username>%s</wsse:Username>
+                # <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">%s</wsse:Password>
+            # </wsse:UsernameToken>
+        # </wsse:Security>
+    # </soapenv:Header>
+    # <soapenv:Body>
+        # ''' % (user, password)
     
     # Build the XML body
     xml_body = '''<csw:GetRecords service='CSW' version='2.0.2'
-            maxRecords='%s'
-            startPosition='%s'
-            resultType='results'
-            outputFormat='application/xml'
-            outputSchema='http://www.opengis.net/cat/csw/2.0.2'
-            xmlns='http://www.opengis.net/cat/csw/2.0.2'
-            xmlns:csw='http://www.opengis.net/cat/csw/2.0.2'
-            xmlns:ogc='http://www.opengis.net/ogc'
-            xmlns:ows='http://www.opengis.net/ows'
-            xmlns:dc='http://purl.org/dc/elements/1.1/'
-            xmlns:dct='http://purl.org/dc/terms/'
-            xmlns:gml='http://www.opengis.net/gml'
-            xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
-            xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
-            http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
-            <csw:Query typeNames='csw:Record'>
-                <csw:ElementSetName typeNames='csw:Record'>full</csw:ElementSetName>
-                <csw:Constraint version='1.1.0'>
-                    <ogc:Filter>
-                        <ogc:And>
-                            %s
-                            %s
-                        </ogc:And>
-                    </ogc:Filter>
-                </csw:Constraint>
-            </csw:Query>
-        </csw:GetRecords>
-    ''' % (max_recs, cur_val, filter, bbox_str)
+    maxRecords='%s'
+    startPosition='%s'
+    resultType='results'
+    outputFormat='application/xml'
+    outputSchema='http://www.opengis.net/cat/csw/2.0.2'
+    xmlns='http://www.opengis.net/cat/csw/2.0.2'
+    xmlns:csw='http://www.opengis.net/cat/csw/2.0.2'
+    xmlns:ogc='http://www.opengis.net/ogc'
+    xmlns:ows='http://www.opengis.net/ows'
+    xmlns:dc='http://purl.org/dc/elements/1.1/'
+    xmlns:dct='http://purl.org/dc/terms/'
+    xmlns:gml='http://www.opengis.net/gml' 
+    xmlns:gmd='http://www.isotc211.org/2005/gmd' 
+    xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+    xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
+    http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
+    <csw:Query typeNames='gmd:MD_Metadata'>
+        <csw:ElementSetName>full</csw:ElementSetName>
+        <csw:Constraint version='1.1.0'>
+            <ogc:Filter>
+                <ogc:And>
+                    %s
+                    %s
+                    %s
+                    %s
+                </ogc:And>
+            </ogc:Filter>
+        </csw:Constraint>
+    </csw:Query>
+</csw:GetRecords>
+    ''' % (max_recs, cur_val, filter, bbox_str, start_filter, end_filter)
     
-    # Create the SOAP footer
-    soap_footer = '''</soapenv:Body>
-</soapenv:Envelope>'''
+    print("xml_body: %s" % xml_body)
+    
+    # # Create the SOAP footer
+    # soap_footer = '''</soapenv:Body>
+# </soapenv:Envelope>'''
     
     # Submit a GetRecords to the CSW
-    post_xml = soap_header + xml_body + soap_footer
+    #post_xml = soap_header + xml_body + soap_footer
+    post_xml = xml_body
 
     return post_xml
     
@@ -518,7 +538,8 @@ def send_cswrequest(xml_post, timeout=10.0, mission='rcm'):
         
     return out_resp
  
-def run(user, password, in_fn=None, bbox=None, maximum=150):
+def run(user, password, in_fn=None, bbox=None, maximum=None, start=None, 
+        end=None):
     """
     Runs the entire process for ordering images from the RCM.
     
@@ -534,8 +555,12 @@ def run(user, password, in_fn=None, bbox=None, maximum=150):
                         id,title,date,collection_id
     @type  bbox:     str
     @param bbox:     The bounding box used for the query request.
-    @type  maximum:  int
+    @type  maximum:  int or str
     @param maximum:  The maximum number of records to be ordered.
+    @type  start:    str
+    @param start:    The maximum number of records to be ordered.
+    @type  end:      str
+    @param end:      The maximum number of records to be ordered.
     
     @rtype:          None
     @return:         None
@@ -611,9 +636,15 @@ def run(user, password, in_fn=None, bbox=None, maximum=150):
     if in_fn is None or in_fn == '':
         # If no file with list of record IDs provided,
         #   get the IDs from the CSW
-    
+        
+        if maximum is None or maximum == '' or not maximum.isdigit():
+            maximum = 10000
+        else:
+            maximum = int(maximum)
+        
         # Get the POST XML for the CSW
-        xml_post = get_csw_postxml(1, user, password, coordinates=coords)
+        xml_post = get_csw_postxml(1, coordinates=coords, max_recs=maximum, 
+                                    start=start, end=end)
         
         #print("\nxml_post: %s" % xml_post)
     
@@ -626,7 +657,11 @@ def run(user, password, in_fn=None, bbox=None, maximum=150):
         resp_xml = csw_r.content
         root = ElementTree.fromstring(resp_xml)
         
+        #print("resp_xml: %s" % resp_xml)
+        
         cur_recs = parse_results(root)
+        
+        print("\n%s records returned after querying the CSW." % len(cur_recs))
         
     if not isinstance(cur_recs, list):
         # If the cur_recs is not a list, an error occurred.
@@ -748,15 +783,20 @@ def run_single(user, password, image_id):
 def main():
 
     parser = argparse.ArgumentParser(description='Order RCM products.')
-    parser.add_argument('-m', '--maximum', help='The maximum number of ' \
-                        'orders to complete. The process will end once this ' \
-                        'number of images has been ordered.')
+    
     parser.add_argument('-u', '--username', help='The username of the ' \
                         'account used for autentication.')
     parser.add_argument('-p', '--password', help='The password of the ' \
                         'account used for autentication.')
     parser.add_argument('-b', '--bbox', help='The bounding box for the ' \
                         'search results (minx,miny,maxx,maxy).')
+    parser.add_argument('-m', '--maximum', help='The maximum number of ' \
+                        'orders to complete. The process will end once this ' \
+                        'number of images has been ordered.')
+    parser.add_argument('-s', '--start', help='The start of the date range. ' \
+                        'Leave blank for no start limit.')
+    parser.add_argument('-e', '--end', help='The end of the date range. ' \
+                        'Leave blank for no end limit.')
     parser.add_argument('-i', '--id', help='The record ID for a single ' \
                         'image. If this parameter is entered, only the image ' \
                         'with this ID will be ordered.')
@@ -771,6 +811,8 @@ def main():
     user = args.username
     password = args.password
     bbox = args.bbox
+    start = args.start
+    end = args.end
     id = args.id
     in_fn = args.input
     
@@ -793,10 +835,6 @@ def main():
         run_single(user, password, id)
         sys.exit(0)
         
-    if bbox is None:
-        bbox = input("Enter the bounding box for the query (format: minx," \
-                    "miny,maxx,maxy): ")
-        
     if user is None:
         user = input("Enter the username for authentication: ")
         if user == '':
@@ -812,22 +850,35 @@ def main():
             print("Exiting process.")
             sys.exit(1)
             
+    if bbox is None:
+        bbox = input("Enter the bounding box for the query (format: minx," \
+                    "miny,maxx,maxy): ")
+            
     if maximum is None:
-        maximum = input("Enter the maximum number of orders allowed within " \
-                    "the time period [150]: ")
-        if maximum == '':
-            maximum = 150
-        else:
-            if not maximum.isdigit():
-                print("\nERROR: A whole number must be provided for the " \
-                        "'maximum' parameter.")
-                print("Exiting process.")
-                sys.exit(1)
-            maximum = int(maximum)
-    else:
-        maximum = int(maximum)
+        maximum = input("Enter the maximum number of orders [all]: ")
+        if maximum == '' or maximum.lower() == 'all':
+            maximum = None
+        # else:
+            # if not maximum.isdigit():
+                # print("\nERROR: A whole number must be provided for the " \
+                        # "'maximum' parameter.")
+                # print("Exiting process.")
+                # sys.exit(1)
+            # maximum = int(maximum)
+    # else:
+        # maximum = int(maximum)
+        
+    if start is None:
+        start = input("Enter the start of the date range for the orders " \
+                        "(format: yyyy-mm-dd) (leave blank for no start " \
+                        "limit): ")
+                        
+    if end is None:
+        end = input("Enter the end of the date range for the orders " \
+                        "(format: yyyy-mm-dd) (leave blank for no end " \
+                        "limit): ")
     
-    run(user, password, in_fn, bbox, maximum)
+    run(user, password, in_fn, bbox, maximum, start, end)
 
 if __name__ == '__main__':
 	sys.exit(main())
