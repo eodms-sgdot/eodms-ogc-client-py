@@ -37,7 +37,7 @@ Next, create the XML POST GetRecords request with the above variables. The reque
 
 GetRecords POST request example:
 
-```
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <csw:GetRecords service='CSW' version='2.0.2'
     maxRecords='15'
