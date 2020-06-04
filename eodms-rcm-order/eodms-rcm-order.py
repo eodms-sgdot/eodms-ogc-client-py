@@ -105,6 +105,31 @@ def build_record(rec_element):
         # auth_f.close()
     
     # return username, password
+    
+def get_collection(in_id):
+    
+    query = '''<csw:GetRecordById 
+	service="CSW" version="2.0.2" 
+	resultType="results" startPosition="1" maxRecords="15" 
+	outputFormat="application/xml" 
+	outputSchema="http://www.opengis.net/cat/csw/2.0.2" 
+	xmlns:csw="http://www.opengis.net/cat/csw/2.0.2" 
+	xmlns:ogc="http://www.opengis.net/ogc" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xsi:schemaLocation="http://www.opengis.net/cat/csw/2.0.2 http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd">
+    <csw:Id>%s</csw:Id>
+    <csw:ElementSetName>full</csw:ElementSetName>
+</csw:GetRecordById>''' % in_id
+    
+    csw_r = send_cswrequest(query, 60.0)
+    
+    # Get first record from the response XML
+    resp_xml = csw_r.content
+    root = ElementTree.fromstring(resp_xml)
+    
+    record = parse_results(csw_r)
+    
+    return record
 
 def get_cov(user, password, rec_id, collection_id, session=None, 
             post=False, ftp={}, timeout=60.0, silent=True):
@@ -414,6 +439,25 @@ def get_exception(in_xml, output='str'):
             else:
                 return child.text
                 
+def get_fromSegmentId(in_rec):
+    
+    #print("in_rec: %s" % in_rec)
+    
+    order_key = in_rec['Order Key']
+    
+    query_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/search" \
+                "?collection=RCMImageProducts&title=%s" % order_key
+                
+    res = requests.get(query_url)
+    
+    #print("res: %s" % res.text)
+    
+    res_json = res.json()
+    
+    rec_id = res_json['results'][0]['recordId']
+    
+    return rec_id
+                
 def get_tag(in_el, nspace, tag, attrb=False):
     """
     Gets a tag (or tags) from an XML tree.
@@ -609,6 +653,18 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             l_split = l.replace('\n', '').split(',')
             for idx, h in enumerate(in_header):
                 rec[h] = l_split[idx]
+            
+            # # If no collection ID provided in CSV file, find it using the CSW
+            # if 'collection_id' not in rec.keys():
+                # rec = get_collection(rec['id'])
+                
+            rec['collection_id'] = "RCMImageProducts"
+                
+            if 'sequence_id' in rec.keys():
+                rec['id'] = rec['sequence_id']
+            elif 'Downlink Segment ID' in rec.keys():
+                rec['id'] = get_fromSegmentId(rec)
+            
             cur_recs.append(rec)
         
         # Close the input file
@@ -661,7 +717,8 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         
         cur_recs = parse_results(root)
         
-        print("\n%s records returned after querying the CSW." % len(cur_recs))
+    
+    print("\n%s records returned after querying the CSW." % len(cur_recs))
         
     if not isinstance(cur_recs, list):
         # If the cur_recs is not a list, an error occurred.
@@ -673,10 +730,11 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     else:
         # Go through each record in the results
         for rec in cur_recs:
-            if rec_count >= maximum:
-                # If the current number of records has exceeded the maximum
-                #   records, stop looping through the records.
-                break
+            if in_fn is None or in_fn == '':
+                if rec_count >= maximum:
+                    # If the current number of records has exceeded the maximum
+                    #   records, stop looping through the records.
+                    break
             
             # Log the start time of the GetCoverage request
             order_start = datetime.datetime.now()
@@ -694,6 +752,10 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             # Get the coverage results XML
             cov_res = get_cov(user, password, id, collection_id, \
                                 timeout=timeout)
+                                
+            # print("rec: %s" % rec)
+            # print("cov_res: %s" % cov_res)
+            # answer = input("Press enter...")
             
             # Log the time the coverage was requested
             cov_time = datetime.datetime.now()
@@ -712,6 +774,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
                 rec['exception'] = str(cov_res)
             else:
                 rec['exception'] = get_exception(cov_res)
+                print("Order for Image ID %s sent successfully." % rec['id'])
                 
             # Add to record count
             rec_count += 1
@@ -791,19 +854,20 @@ def main():
     parser.add_argument('-b', '--bbox', help='The bounding box for the ' \
                         'search results (minx,miny,maxx,maxy).')
     parser.add_argument('-m', '--maximum', help='The maximum number of ' \
-                        'orders to complete. The process will end once this ' \
-                        'number of images has been ordered.')
-    parser.add_argument('-s', '--start', help='The start of the date range. ' \
-                        'Leave blank for no start limit.')
+                        'orders to complete. The process will end once ' \
+                        'this number of images has been ordered.')
+    parser.add_argument('-s', '--start', help='The start of the date ' \
+                        'range. Leave blank for no start limit.')
     parser.add_argument('-e', '--end', help='The end of the date range. ' \
                         'Leave blank for no end limit.')
     parser.add_argument('-i', '--id', help='The record ID for a single ' \
-                        'image. If this parameter is entered, only the image ' \
-                        'with this ID will be ordered.')
-    parser.add_argument('-f', '--input', help='A CSV file containing a list of ' \
-                        'record IDs. The process will only order the images ' \
-                        'from this file.\nThe file should contain the ' \
-                        'header and columns:\n  id,title,date,collection_id')
+                        'image. If this parameter is entered, only the ' \
+                        'image with this ID will be ordered.')
+    parser.add_argument('-f', '--input', help='A CSV file containing a list ' \
+                        'of record IDs. The process will only order the ' \
+                        'images from this file.\nThe file should contain a ' \
+                        'column called "id", "sequence_id" or "Downlink ' \
+                        'Segment ID".')
     
     args = parser.parse_args()
     
@@ -849,34 +913,35 @@ def main():
             print("\nERROR: A password is required to order images.")
             print("Exiting process.")
             sys.exit(1)
-            
-    if bbox is None:
-        bbox = input("Enter the bounding box for the query (format: minx," \
-                    "miny,maxx,maxy): ")
-            
-    if maximum is None:
-        maximum = input("Enter the maximum number of orders [all]: ")
-        if maximum == '' or maximum.lower() == 'all':
-            maximum = None
+    
+    if in_fn is None or in_fn == '':
+        if bbox is None:
+            bbox = input("Enter the bounding box for the query (format: minx," \
+                        "miny,maxx,maxy): ")
+                
+        if maximum is None:
+            maximum = input("Enter the maximum number of orders [all]: ")
+            if maximum == '' or maximum.lower() == 'all':
+                maximum = None
+            # else:
+                # if not maximum.isdigit():
+                    # print("\nERROR: A whole number must be provided for the " \
+                            # "'maximum' parameter.")
+                    # print("Exiting process.")
+                    # sys.exit(1)
+                # maximum = int(maximum)
         # else:
-            # if not maximum.isdigit():
-                # print("\nERROR: A whole number must be provided for the " \
-                        # "'maximum' parameter.")
-                # print("Exiting process.")
-                # sys.exit(1)
             # maximum = int(maximum)
-    # else:
-        # maximum = int(maximum)
-        
-    if start is None:
-        start = input("Enter the start of the date range for the orders " \
-                        "(format: yyyy-mm-dd) (leave blank for no start " \
-                        "limit): ")
-                        
-    if end is None:
-        end = input("Enter the end of the date range for the orders " \
-                        "(format: yyyy-mm-dd) (leave blank for no end " \
-                        "limit): ")
+            
+        if start is None:
+            start = input("Enter the start of the date range for the orders " \
+                            "(format: yyyy-mm-dd) (leave blank for no start " \
+                            "limit): ")
+                            
+        if end is None:
+            end = input("Enter the end of the date range for the orders " \
+                            "(format: yyyy-mm-dd) (leave blank for no end " \
+                            "limit): ")
     
     run(user, password, in_fn, bbox, maximum, start, end)
 
