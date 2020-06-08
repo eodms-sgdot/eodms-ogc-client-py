@@ -11,6 +11,8 @@ import math
 import traceback
 import re
 import getpass
+import urllib.parse
+import json
 
 def build_record(rec_element):
     """
@@ -439,24 +441,74 @@ def get_exception(in_xml, output='str'):
             else:
                 return child.text
                 
-def get_fromSegmentId(in_rec):
+def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
+    """
+    Gets the record information from the RAPI using the order key.
     
-    #print("in_rec: %s" % in_rec)
+    @type  in_rec:     str
+    @param in_rec:     A record from the saved CSV search results from the EODMS.
+    @type  timeout:    float
+    @param timeout:    The timeout in seconds for the request.
+    @type  attempts:   int
+    @param attempts:   The number of attempts if a timeout occurs when accessing the RAPI.
     
+    @rtype:     dict
+    @return:    A dictionary with information regarding the record found in the RAPI.
+    """
+    
+    # Get the "Order Key" and "Downlink Segment ID" from the CSV file record
     order_key = in_rec['Order Key']
+    download_segment_id = in_rec['Downlink Segment ID']
     
+    # Create the query with the downlink segment ID
+    query = "RCM.DOWNLINK_SEGMENT_ID='%s'" % download_segment_id
+    query_enc = urllib.parse.quote(query)
     query_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/search" \
-                "?collection=RCMImageProducts&title=%s" % order_key
+                "?collection=RCMImageProducts&query=%s" % query_enc
                 
-    res = requests.get(query_url)
+    print("query_url: %s" % query_url)
     
-    #print("res: %s" % res.text)
+    res = None
+    attempt = 1
+    # Get the entry records from the RAPI using the downlink segment ID
+    while res is None and attempt <= attempts:
+        # Continue to attempt if timeout occurs
+        try:
+            print("\nGetting record for '%s' (attempt %s)" % \
+                    (order_key, attempt))
+            res = requests.get(query_url, timeout=timeout)
+        except:
+            attempt += 1
     
+    # If no results from RAPI, return None
+    if res is None: return None
+    
+    # Convert RAPI results to JSON
     res_json = res.json()
     
-    rec_id = res_json['results'][0]['recordId']
+    # Get the results from the JSON
+    results = res_json['results']
     
-    return rec_id
+    print("\nNumber of results: %s" % len(results))
+    
+    for res in results:
+        # Go through each record in the results to locate the
+        #   specific record with the order key
+        if res['title'] == order_key:
+            mdata = res['metadata2']
+            
+            # Create the output record dictionary and fill it
+            #   with the record's metadata and the record ID
+            rec = {}
+            rec['id'] = res['recordId']
+            rec['collection_id'] = res['collectionId']
+            rec['title'] = res['title']
+            
+            for m in mdata:
+                if m['id'] == 'CATALOG_IMAGE.START_DATETIME':
+                    rec['date'] = m['value']
+    
+    return rec
                 
 def get_tag(in_el, nspace, tag, attrb=False):
     """
@@ -581,6 +633,63 @@ def send_cswrequest(xml_post, timeout=10.0, mission='rcm'):
         print("out_resp: %s" % out_resp)
         
     return out_resp
+    
+def send_orders(in_res, user, password, timeout=60.0, session=None):
+    """
+    Sends a POST request to the RAPI in order to order images.
+    
+    @type  in_res:   list
+    @param in_res:   A list of records.
+    @type  user:     str
+    @param user:     The username of the authentication.
+    @type  password: str
+    @param password: The password of the authentication.
+    @type  timeout:  float
+    @param timeout:  The timeout in seconds for the request.
+    @type  session:  requests.Session
+    @param session:  A previously created session with authentication.
+    
+    @rtype:          json
+    @return:         The order information from the order request.
+    """
+    
+    if session is None:
+        # If no session provided, create one with the provided username
+        #username, password = get_auth(user)
+    
+        # Create a session with the authentication
+        session = requests.Session()
+        session.auth = (user, password)
+    
+    # Add the 'Content-Type' option to the header
+    session.headers.update({'Content-Type': 'application/json'})
+    
+    # Create the items list for the POST request JSON
+    items = []
+    for r in in_res:
+        if 'exception' in r.keys(): continue
+        item = {"collectionId": r['collection_id'], 
+                "recordId": r['id']}
+        items.append(item)
+    
+    # If there are no items, return None
+    if len(items) == 0: return None
+    
+    # Create the dictionary for the POST request JSON
+    post_dict = {"destinations": [], 
+                "items": items}
+    
+    # Dump the dictionary into a JSON object
+    post_json = json.dumps(post_dict)
+    
+    # Set the RAPI URL
+    order_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/order"
+    
+    # Send the JSON request to the RAPI
+    order_res = session.post(url=order_url, data=post_json, \
+                                timeout=timeout)
+    
+    return order_res.json()
  
 def run(user, password, in_fn=None, bbox=None, maximum=None, start=None, 
         end=None):
@@ -653,18 +762,27 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             l_split = l.replace('\n', '').split(',')
             for idx, h in enumerate(in_header):
                 rec[h] = l_split[idx]
-            
-            # # If no collection ID provided in CSV file, find it using the CSW
-            # if 'collection_id' not in rec.keys():
-                # rec = get_collection(rec['id'])
                 
             rec['collection_id'] = "RCMImageProducts"
                 
             if 'sequence_id' in rec.keys():
+                # If sequence_id was provided
                 rec['id'] = rec['sequence_id']
             elif 'Downlink Segment ID' in rec.keys():
-                rec['id'] = get_fromSegmentId(rec)
+                # Determine the record ID using the order key and 
+                #   downlink segment ID.
+                # The record ID will be used to order the image
+                #   in the next step
+                res = get_fromOrderKey(rec, timeout)
+                if res is None:
+                    # If no results found using the order key
+                    rec['id'] = 'N/A'
+                    rec['title'] = rec['Order Key']
+                    rec['exception'] = 'The RAPI search request timed out.'
+                else:
+                    rec = res
             
+            # Add the record to the list of records
             cur_recs.append(rec)
         
         # Close the input file
@@ -673,8 +791,9 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     # Create the file for the records
     orders_fn = '%s_OrdersSent.csv' % fn_str
     orders_csv = open(orders_fn, 'w')
-    orders_header = ['id', 'title', 'date', 'collection_id', 'request_sent', \
-                    'exception', 'order_time']
+    orders_header = ['id', 'title', 'date', 'collection_id', 'exception', \
+                    'order_id', 'order_item_id', 'order_status', \
+                    'time_ordered']
     orders_csv.write('%s\n' % fn_str)
     orders_csv.write('%s\n' % ','.join(orders_header))
     
@@ -718,7 +837,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         cur_recs = parse_results(root)
         
     
-    print("\n%s records returned after querying the CSW." % len(cur_recs))
+    print("\n%s records returned after querying the RAPI." % len(cur_recs))
         
     if not isinstance(cur_recs, list):
         # If the cur_recs is not a list, an error occurred.
@@ -728,74 +847,58 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             print("Exiting process.")
             sys.exit(1)
     else:
-        # Go through each record in the results
+        
+        # If a maximum is provided, cut the current records
+        #   at the maximum position
+        if maximum is not None and len(cur_recs) > maximum:
+            cur_recs = cur_recs[:maximum]
+        
+        # Send the order requests to the RAPI
+        order_res = send_orders(cur_recs, user, password)
+        
         for rec in cur_recs:
-            if in_fn is None or in_fn == '':
-                if rec_count >= maximum:
-                    # If the current number of records has exceeded the maximum
-                    #   records, stop looping through the records.
-                    break
             
-            # Log the start time of the GetCoverage request
-            order_start = datetime.datetime.now()
+            print("rec: %s" % rec)
             
-            # If no collection ID, continue to next record as this means
-            #   the image cannot be ordered
-            if rec['collection_id'] == '': continue
-            
-            print("\nCurrent number processed: %s" % rec_count)
-            
-            # Get the ID and collection ID
-            id = rec['id']
-            collection_id = 'RCMImageProducts'
-            
-            # Get the coverage results XML
-            cov_res = get_cov(user, password, id, collection_id, \
-                                timeout=timeout)
-                                
-            # print("rec: %s" % rec)
-            # print("cov_res: %s" % cov_res)
-            # answer = input("Press enter...")
-            
-            # Log the time the coverage was requested
-            cov_time = datetime.datetime.now()
-            rec['time_ordered'] = cov_time.strftime("%Y%m%d_%H%M%S")
-            
-            # Check for any exception
-            rec['exception'] = ''
-            if cov_res is None:
-                rec['exception'] = 'The request timed out.'
-                print("\nEXCEPTION: The request timed out.")
-            elif isinstance(cov_res, requests.exceptions.ReadTimeout):
-                print("\nEXCEPTION: The request timed out.")
-                rec['exception'] = 'The request timed out.'
-            elif isinstance(cov_res, Exception):
-                print("\nEXCEPTION: %s" % cov_res)
-                rec['exception'] = str(cov_res)
-            else:
-                rec['exception'] = get_exception(cov_res)
-                print("Order for Image ID %s sent successfully." % rec['id'])
-                
-            # Add to record count
-            rec_count += 1
-            
+            # Get the order info for the current record
+            order_info = None
+            if order_res is not None:
+                for o in order_res['items']:
+                    if o['recordId'] == rec['id']:
+                        rec['order_id'] = o['orderId']
+                        rec['order_item_id'] = o['itemId']
+                        rec['order_status'] = o['status']
+                        cov_time = datetime.datetime.now()
+                        rec['time_ordered'] = cov_time.strftime(\
+                                                "%Y%m%d_%H%M%S")
+        
             # Write record to CSV
-            if 'format' in rec.keys(): del rec['format']
-            if 'description' in rec.keys(): del rec['description']
-            if 'language' in rec.keys(): del rec['language']
-            if 'refs' in rec.keys(): del rec['refs']
-            if 'source' in rec.keys(): del rec['source']
+            del_lst = []
+            for k in rec.keys():
+                if k not in orders_header:
+                    del_lst.append(k)
+                    
+            for k in del_lst:
+                del rec[k]
             
-            # Log end time of the request
-            order_end = datetime.datetime.now()
+            # # Log end time of the request
+            # order_end = datetime.datetime.now()
             
-            # Get the difference in time for the request
-            order_time = order_end - order_start
+            # # Get the difference in time for the request
+            # order_time = order_end - order_start
             
-            rec['order_time'] = str(order_time.total_seconds())
+            # rec['order_time'] = str(order_time.total_seconds())
+            
+            # print("rec: %s" % rec)
             
             # Write the values to the output CSV file
-            orders_csv.write('%s\n' % ','.join(rec.values()))
+            out_vals = []
+            for h in orders_header:
+                if h in rec.keys():
+                    out_vals.append(rec[h])
+                else:
+                    out_vals.append('')
+            orders_csv.write('%s\n' % ','.join(out_vals))
             
     # Get the end time for the entire process
     end_time = datetime.datetime.now()
