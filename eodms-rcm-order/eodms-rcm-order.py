@@ -405,7 +405,7 @@ def get_cswPostxml(cur_val, id=None, coordinates='',
 
     return post_xml
     
-def get_exception(in_xml, output='str'):
+def get_exception(in_str, output='str'):
     """
     Gets the Exception text (or XML) from an request result.
     
@@ -425,13 +425,15 @@ def get_exception(in_xml, output='str'):
     """
 
     # If the input XML is None, return None
-    if in_xml is None: return None
+    if in_str is None: return None
+    
+    if is_json(in_str): return in_str
     
     # If the input is a string, convert it to a xml.etree.ElementTree.Element
-    if isinstance(in_xml, str):
-        root = ElementTree.fromstring(in_xml)
+    if isinstance(in_str, str):
+        root = ElementTree.fromstring(in_str)
     else:
-        root = in_xml
+        root = in_str
     
     # Cycle through the input XML and location the ExceptionText element
     out_except = []
@@ -446,7 +448,7 @@ def get_exception(in_xml, output='str'):
             
     return out_except
                 
-def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
+def get_fromOrderKey(in_rec, session, timeout=60.0, attempts=4):
     """
     Gets the record information from the RAPI using the order key.
     
@@ -481,7 +483,7 @@ def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
         try:
             print("\nGetting record for '%s' (attempt %s)" % \
                     (order_key, attempt))
-            res = requests.get(query_url, timeout=timeout)
+            res = session.get(query_url, timeout=timeout)
         except:
             attempt += 1
     
@@ -567,6 +569,13 @@ def get_tag(in_el, nspace, tag, attrb=False):
     
     return val
     
+def is_json(myjson):
+    try:
+        json_object = json.loads(myjson)
+    except ValueError as e:
+        return False
+    return True
+    
 def parse_results(xml_tree):
     """
     Parses the results of a CSW request and converts each record to a 
@@ -645,7 +654,7 @@ def send_cswrequest(xml_post, timeout=10.0, mission='rcm'):
         
     return out_resp
     
-def send_orders(in_res, user, password, timeout=60.0, session=None):
+def send_orders(in_res, session=None, timeout=60.0, user=None, password=None):
     """
     Sends a POST request to the RAPI in order to order images.
     
@@ -751,6 +760,10 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     
     print("Process started at: %s" % fn_str)
     
+    # Create a session with the authentication
+    session = requests.Session()
+    session.auth = (user, password)
+    
     if in_fn is None or in_fn == '':
         # If no input file provided by user
     
@@ -784,7 +797,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
                 #   downlink segment ID.
                 # The record ID will be used to order the image
                 #   in the next step
-                res = get_fromOrderKey(rec, timeout)
+                res = get_fromOrderKey(rec, session, timeout)
                 if res is None:
                     # If no results found using the order key
                     rec['id'] = 'N/A'
@@ -853,7 +866,8 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         
     
     print("\n%s records returned after querying the RAPI." % len(cur_recs))
-        
+    
+    order_count = 0
     if not isinstance(cur_recs, list):
         # If the cur_recs is not a list, an error occurred.
         err_msg = cur_recs.text
@@ -869,7 +883,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             cur_recs = cur_recs[:maximum]
         
         # Send the order requests to the RAPI
-        order_res = send_orders(cur_recs, user, password)
+        order_res = send_orders(cur_recs, session)
         
         for rec in cur_recs:
             
@@ -925,10 +939,10 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     print("Process ended at: %s" % end_str)
     
     if order_res is None:
-        num_orders = 0
+        order_count = 0
     else:
-        num_orders = len(order_res)
-    print("\n%s images were ordered." % num_orders)
+        order_count = len(order_res['items'])
+    print("\n%s images were ordered." % order_count)
     
     print("\nA list of results can be found in the CSV file '%s'." \
             % orders_fn)
