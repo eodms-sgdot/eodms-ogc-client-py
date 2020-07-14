@@ -257,7 +257,7 @@ def get_cov(user, password, rec_id, collection_id, session=None,
     
     return except_el
 
-def get_csw_postxml(cur_val, id=None, coordinates='', 
+def get_cswPostxml(cur_val, id=None, coordinates='', 
                     max_recs=150, start=None, end=None):
     """
     Gets the POST XML for the CSW.
@@ -434,12 +434,17 @@ def get_exception(in_xml, output='str'):
         root = in_xml
     
     # Cycle through the input XML and location the ExceptionText element
+    out_except = []
     for child in root.iter('*'):
         if child.tag.find('ExceptionText') > -1:
             if output == 'tree':
                 return child
             else:
                 return child.text
+        elif child.tag.find('p') > -1:
+            out_except.append(child.text)
+            
+    return out_except
                 
 def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
     """
@@ -466,7 +471,7 @@ def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
     query_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/search" \
                 "?collection=RCMImageProducts&query=%s" % query_enc
                 
-    print("query_url: %s" % query_url)
+    print("\nQuery URL: %s" % query_url)
     
     res = None
     attempt = 1
@@ -482,6 +487,12 @@ def get_fromOrderKey(in_rec, timeout=60.0, attempts=4):
     
     # If no results from RAPI, return None
     if res is None: return None
+    
+    err = get_exception(res.text)
+    
+    if isinstance(err, list):
+        print("WARNING: %s" % ' '.join(err))
+        return err
     
     # Convert RAPI results to JSON
     res_json = res.json()
@@ -779,6 +790,10 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
                     rec['id'] = 'N/A'
                     rec['title'] = rec['Order Key']
                     rec['exception'] = 'The RAPI search request timed out.'
+                elif isinstance(res, list):
+                    rec['id'] = 'N/A'
+                    rec['title'] = rec['Order Key']
+                    rec['exception'] = ' '.join(res)
                 else:
                     rec = res
             
@@ -789,7 +804,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         in_f.close()
     
     # Create the file for the records
-    orders_fn = '%s_OrdersSent.csv' % fn_str
+    orders_fn = '%s_OrderInfo.csv' % fn_str
     orders_csv = open(orders_fn, 'w')
     orders_header = ['id', 'title', 'date', 'collection_id', 'exception', \
                     'order_id', 'order_item_id', 'order_status', \
@@ -818,7 +833,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             maximum = int(maximum)
         
         # Get the POST XML for the CSW
-        xml_post = get_csw_postxml(1, coordinates=coords, max_recs=maximum, 
+        xml_post = get_cswPostxml(1, coordinates=coords, max_recs=maximum, 
                                     start=start, end=end)
         
         #print("\nxml_post: %s" % xml_post)
@@ -857,8 +872,6 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         order_res = send_orders(cur_recs, user, password)
         
         for rec in cur_recs:
-            
-            print("rec: %s" % rec)
             
             # Get the order info for the current record
             order_info = None
@@ -911,7 +924,13 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     print("\nProcess started at: %s" % fn_str)
     print("Process ended at: %s" % end_str)
     
-    print("\nA list of the ordered images can be found in the CSV file '%s'." \
+    if order_res is None:
+        num_orders = 0
+    else:
+        num_orders = len(order_res)
+    print("\n%s images were ordered." % num_orders)
+    
+    print("\nA list of results can be found in the CSV file '%s'." \
             % orders_fn)
     
 def run_single(user, password, image_id):
