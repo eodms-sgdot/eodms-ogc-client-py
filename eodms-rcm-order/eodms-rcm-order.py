@@ -34,35 +34,35 @@ def build_record(rec_element):
     
     # Set the image ID
     id_str = get_tag(rec_element, dc_nspace, 'identifier')
-    rec_dict['id'] = id_str
+    rec_dict['Record ID'] = id_str
     
     # Set the title of the image
     title = get_tag(rec_element, dc_nspace, 'title')
-    rec_dict['title'] = title
+    rec_dict['Order Key'] = title
     
     # Set the format of the image
     frmat = get_tag(rec_element, dc_nspace, 'format')
-    rec_dict['format'] = frmat
+    rec_dict['Format'] = frmat
     
     # Set the description
     desc = get_tag(rec_element, dc_nspace, 'description')
-    rec_dict['description'] = desc
+    rec_dict['Description'] = desc
     
     # Set the date
     date = get_tag(rec_element, dc_nspace, 'date')
-    rec_dict['date'] = date
+    rec_dict['Date'] = date
     
     # Set the language
     lang = get_tag(rec_element, dc_nspace, 'language')
-    rec_dict['language'] = lang
+    rec_dict['Language'] = lang
     
     # Set the references
     refs = get_tag(rec_element, dct_nspace, 'references')
-    rec_dict['refs'] = refs
+    rec_dict['References'] = refs
     
     # Set the source
     src = get_tag(rec_element, dc_nspace, 'source')
-    rec_dict['source'] = src
+    rec_dict['Source'] = src
     
     # Parse the collection ID from the first dct:references links
     try:
@@ -75,7 +75,7 @@ def build_record(rec_element):
     except:
         collection_id = ''
         
-    rec_dict['collection_id'] = collection_id
+    rec_dict['Collection ID'] = collection_id
     
     return rec_dict
 
@@ -504,6 +504,15 @@ def get_fromOrderKey(in_rec, session, timeout=60.0, attempts=4):
     
     print("\nNumber of results: %s" % len(results))
     
+    if len(results) == 0:
+        err = "No images could be found containing Downlink " \
+                "Segment ID: %s" % download_segment_id
+        print("\nWARNING: No images could be found containing Downlink " \
+                "Segment ID: %s" % download_segment_id)
+        print("Skipping this entry")
+        #answer = input("Press enter...")
+        return [err]
+    
     for res in results:
         # Go through each record in the results to locate the
         #   specific record with the order key
@@ -513,13 +522,13 @@ def get_fromOrderKey(in_rec, session, timeout=60.0, attempts=4):
             # Create the output record dictionary and fill it
             #   with the record's metadata and the record ID
             rec = {}
-            rec['id'] = res['recordId']
-            rec['collection_id'] = res['collectionId']
-            rec['title'] = res['title']
+            rec['Record ID'] = res['recordId']
+            rec['Collection ID'] = res['collectionId']
+            rec['Order Key'] = res['title']
             
             for m in mdata:
                 if m['id'] == 'CATALOG_IMAGE.START_DATETIME':
-                    rec['date'] = m['value']
+                    rec['Date'] = m['value']
     
     return rec
                 
@@ -572,7 +581,7 @@ def get_tag(in_el, nspace, tag, attrb=False):
 def is_json(myjson):
     try:
         json_object = json.loads(myjson)
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         return False
     return True
     
@@ -605,6 +614,9 @@ def parse_results(xml_tree):
             rec_elements = child.findall(record_tag)
             for r in rec_elements:
                 rec = build_record(r)
+                
+                print("rec: %s" % rec)
+                answer = input("Press enter...")
                 
                 # Add to the records list
                 records.append(rec)
@@ -687,9 +699,13 @@ def send_orders(in_res, session=None, timeout=60.0, user=None, password=None):
     # Create the items list for the POST request JSON
     items = []
     for r in in_res:
-        if 'exception' in r.keys(): continue
-        item = {"collectionId": r['collection_id'], 
-                "recordId": r['id']}
+        if 'Exception' in r.keys(): continue
+        if 'Record ID' in r.keys():
+            id_col = 'Record ID'
+        else:
+            id_col = 'Sequence ID'
+        item = {"collectionId": r['Collection ID'], 
+                "recordId": r[id_col]}
         items.append(item)
     
     # If there are no items, return None
@@ -764,6 +780,8 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     session = requests.Session()
     session.auth = (user, password)
     
+    id_col = 'Record ID'
+    
     if in_fn is None or in_fn == '':
         # If no input file provided by user
     
@@ -787,11 +805,12 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             for idx, h in enumerate(in_header):
                 rec[h] = l_split[idx]
                 
-            rec['collection_id'] = "RCMImageProducts"
+            rec['Collection ID'] = "RCMImageProducts"
                 
-            if 'sequence_id' in rec.keys():
+            if 'Sequence ID' in rec.keys():
                 # If sequence_id was provided
-                rec['id'] = rec['sequence_id']
+                #rec['Sequence ID'] = rec['sequence_id']
+                id_col = 'Sequence ID'
             elif 'Downlink Segment ID' in rec.keys():
                 # Determine the record ID using the order key and 
                 #   downlink segment ID.
@@ -800,13 +819,11 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
                 res = get_fromOrderKey(rec, session, timeout)
                 if res is None:
                     # If no results found using the order key
-                    rec['id'] = 'N/A'
-                    rec['title'] = rec['Order Key']
-                    rec['exception'] = 'The RAPI search request timed out.'
+                    rec['Record ID'] = 'N/A'
+                    rec['Exception'] = 'The RAPI search request timed out.'
                 elif isinstance(res, list):
-                    rec['id'] = 'N/A'
-                    rec['title'] = rec['Order Key']
-                    rec['exception'] = ' '.join(res)
+                    rec['Record ID'] = 'N/A'
+                    rec['Exception'] = ' '.join(res)
                 else:
                     rec = res
             
@@ -819,22 +836,23 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     # Create the file for the records
     orders_fn = '%s_OrderInfo.csv' % fn_str
     orders_csv = open(orders_fn, 'w')
-    orders_header = ['id', 'title', 'date', 'collection_id', 'exception', \
-                    'order_id', 'order_item_id', 'order_status', \
-                    'time_ordered']
-    orders_csv.write('%s\n' % fn_str)
+    orders_header = [id_col, 'Order Key', 'Date', 'Collection ID', 'Exception', \
+                    'Order ID', 'Order Item ID', 'Order Status', \
+                    'Time Ordered']
+    orders_csv.write('Order process started at: %s\n' % fn_str)
     orders_csv.write('%s\n' % ','.join(orders_header))
     
     # Parse the bbox
-    try:
-        minx, miny, maxx, maxy = bbox.split(',')
-        coords = "%s %s, %s %s" % (minx.strip(), miny.strip(), maxx.strip(), \
-                                maxy.strip())
-    except:
-        print('\nWARNING: Issue parsing the coordinates for the ' \
-                'bounding box.')
-        print('No bounding box will be used for the query.')
-        coords = ''
+    coords = ''
+    if bbox is not None:
+        try:
+            minx, miny, maxx, maxy = bbox.split(',')
+            coords = "%s %s, %s %s" % (minx.strip(), miny.strip(), maxx.strip(), \
+                                    maxy.strip())
+        except:
+            print('\nWARNING: Issue parsing the coordinates for the ' \
+                    'bounding box.')
+            print('No bounding box will be used for the query.')
     
     if in_fn is None or in_fn == '':
         # If no file with list of record IDs provided,
@@ -860,14 +878,15 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
         resp_xml = csw_r.content
         root = ElementTree.fromstring(resp_xml)
         
-        #print("resp_xml: %s" % resp_xml)
+        print("resp_xml: %s" % resp_xml)
+        answer = input("Press enter...")
         
         cur_recs = parse_results(root)
-        
     
     print("\n%s records returned after querying the RAPI." % len(cur_recs))
     
     order_count = 0
+    order_res = None
     if not isinstance(cur_recs, list):
         # If the cur_recs is not a list, an error occurred.
         err_msg = cur_recs.text
@@ -891,12 +910,12 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
             order_info = None
             if order_res is not None:
                 for o in order_res['items']:
-                    if o['recordId'] == rec['id']:
-                        rec['order_id'] = o['orderId']
-                        rec['order_item_id'] = o['itemId']
-                        rec['order_status'] = o['status']
+                    if o['recordId'] == rec[id_col]:
+                        rec['Order ID'] = o['orderId']
+                        rec['Order Item ID'] = o['itemId']
+                        rec['Order Status'] = o['status']
                         cov_time = datetime.datetime.now()
-                        rec['time_ordered'] = cov_time.strftime(\
+                        rec['Time Ordered'] = cov_time.strftime(\
                                                 "%Y%m%d_%H%M%S")
         
             # Write record to CSV
@@ -932,7 +951,7 @@ def run(user, password, in_fn=None, bbox=None, maximum=None, start=None,
     end_str = end_time.strftime("%Y%m%d_%H%M%S")
     
     # Add the end time to the output CSV
-    orders_csv.write("%s\n" % end_str)
+    orders_csv.write("Order process ended at: %s\n" % end_str)
     orders_csv.close()
     
     print("\nProcess started at: %s" % fn_str)
@@ -984,9 +1003,9 @@ def main():
     parser = argparse.ArgumentParser(description='Order RCM products.')
     
     parser.add_argument('-u', '--username', help='The username of the ' \
-                        'account used for autentication.')
+                        'EODMS account used for authentication.')
     parser.add_argument('-p', '--password', help='The password of the ' \
-                        'account used for autentication.')
+                        'EODMS account used for authentication.')
     parser.add_argument('-b', '--bbox', help='The bounding box for the ' \
                         'search results (minx,miny,maxx,maxy).')
     parser.add_argument('-m', '--maximum', help='The maximum number of ' \
@@ -1002,8 +1021,8 @@ def main():
     parser.add_argument('-f', '--input', help='A CSV file containing a list ' \
                         'of record IDs. The process will only order the ' \
                         'images from this file.\nThe file should contain a ' \
-                        'column called "id", "sequence_id" or "Downlink ' \
-                        'Segment ID".')
+                        'column called "Record ID", "Sequence ID" or "Downlink ' \
+                        'Segment ID" with an "Order Key" column.')
     
     args = parser.parse_args()
     
