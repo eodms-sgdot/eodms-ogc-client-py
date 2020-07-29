@@ -151,6 +151,7 @@ def is_json(my_json):
     try:
         json_object = json.loads(my_json)
     except (ValueError, TypeError) as e:
+        print("e: %s" % e)
         return False
     return True
     
@@ -173,47 +174,51 @@ def send_orders(in_res, session=None, user=None, password=None):
     @return:         The order information from the order request.
     """
     
-    if session is None:
-        # If no session provided, create one with the provided username
-        #username, password = get_auth(user)
-    
-        # Create a session with the authentication
-        session = requests.Session()
-        session.auth = (user, password)
-    
-    # Add the 'Content-Type' option to the header
-    session.headers.update({'Content-Type': 'application/json'})
-    
-    # Create the items list for the POST request JSON
-    items = []
-    for r in in_res:
-        if 'Exception' in r.keys(): continue
-        if 'Record ID' in r.keys():
-            id_col = 'Record ID'
-        else:
-            id_col = 'Sequence ID'
-        item = {"collectionId": r['Collection ID'], 
-                "recordId": r[id_col]}
-        items.append(item)
-    
-    # If there are no items, return None
-    if len(items) == 0: return None
-    
-    # Create the dictionary for the POST request JSON
-    post_dict = {"destinations": [], 
-                "items": items}
-    
-    # Dump the dictionary into a JSON object
-    post_json = json.dumps(post_dict)
-    
-    # Set the RAPI URL
-    order_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/order"
-    
-    # Send the JSON request to the RAPI
-    order_res = session.post(url=order_url, data=post_json) #, \
-                                #timeout=timeout)
-    
-    return order_res.json()
+    try:
+        if session is None:
+            # If no session provided, create one with the provided username
+            #username, password = get_auth(user)
+        
+            # Create a session with the authentication
+            session = requests.Session()
+            session.auth = (user, password)
+        
+        # Add the 'Content-Type' option to the header
+        session.headers.update({'Content-Type': 'application/json'})
+        
+        # Create the items list for the POST request JSON
+        items = []
+        for r in in_res:
+            if 'Exception' in r.keys(): continue
+            if 'Record ID' in r.keys():
+                id_col = 'Record ID'
+            else:
+                id_col = 'Sequence ID'
+            item = {"collectionId": r['Collection ID'], 
+                    "recordId": r[id_col]}
+            items.append(item)
+        
+        # If there are no items, return None
+        if len(items) == 0: return None
+        
+        # Create the dictionary for the POST request JSON
+        post_dict = {"destinations": [], 
+                    "items": items}
+        
+        # Dump the dictionary into a JSON object
+        post_json = json.dumps(post_dict)
+        
+        # Set the RAPI URL
+        order_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/order"
+        
+        # Send the JSON request to the RAPI
+        order_res = session.post(url=order_url, data=post_json)
+                                    
+        #print("order_res: %s" % order_res)
+        
+        return order_res.json()
+    except Exception as err:
+        return err
  
 def run(user, password, in_fn):
     """
@@ -332,8 +337,17 @@ def run(user, password, in_fn):
             print("Exiting process.")
             sys.exit(1)
     else:
+    
+        print("\nTotal records to order: %s" % len(cur_recs))
+    
         order_ids = []
         for i in range(0, len(cur_recs), 100):
+            
+            end_i = i + 100
+            
+            if end_i > len(cur_recs): end_i = len(cur_recs)
+            
+            print("\nSending orders for records %s to %s..." % (i + 1, end_i))
             
             if len(cur_recs) < i + 100:
                 sub_recs = cur_recs[i:]
@@ -342,6 +356,12 @@ def run(user, password, in_fn):
             
             # Send the order requests to the RAPI
             order_res = send_orders(sub_recs, session, timeout)
+            
+            if isinstance(order_res, requests.exceptions.ReadTimeout) or \
+                isinstance(order_res, json.JSONDecodeError):
+                print("An error occurred while sending the order:")
+                print(order_res)
+                continue
             
             #print("order_res: %s" % order_res)
             order_ids.append(order_res['items'][0]['orderId'])
@@ -376,6 +396,8 @@ def run(user, password, in_fn):
                     else:
                         out_vals.append('')
                 orders_csv.write('%s\n' % ','.join(out_vals))
+                
+            print("Orders sent; Order ID: %s" % sub_recs[0]['Order ID'])
                 
             order_count += len(order_res['items'])
             
