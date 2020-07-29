@@ -155,6 +155,64 @@ def is_json(my_json):
         return False
     return True
     
+def log_orders(in_recs, order_res, orders_csv, orders_header, error=False):
+    """
+    Saves the order results to the CSV file
+    
+    @type  in_recs:       list
+    @param in_recs:       The list of images from the original CSV file.
+    @type  order_res:     JSON
+    @param order_res:     A JSON containing the results from the order request.
+    @type  orders_csv:    file
+    @param orders_csv:    The output CSV file object.
+    @type  orders_header: list
+    @param orders_header: A list of the column names for the output CSV.
+    @type  error:         boolean
+    @param error:         Determines whether the input orders_res is an error.
+    
+    @rtype:  None
+    @return: None
+    """
+    
+    if 'Record ID' in orders_header:
+        id_col = 'Record ID'
+    else:
+        id_col = 'Sequence ID'
+    
+    for rec in in_recs:
+        
+        # Get the order info for the current record
+        order_info = None
+        if order_res is not None and not error:
+            for o in order_res['items']:
+                if o['recordId'] == rec[id_col]:
+                    rec['Order ID'] = o['orderId']
+                    rec['Order Item ID'] = o['itemId']
+                    rec['Order Status'] = o['status']
+                    cov_time = datetime.datetime.now()
+                    rec['Time Ordered'] = cov_time.strftime(\
+                                            "%Y%m%d_%H%M%S")
+        else:
+            rec['Exception'] = '"%s"' % str(order_res)
+    
+        # Write record to CSV
+        del_lst = []
+        for k in rec.keys():
+            if k not in orders_header:
+                del_lst.append(k)
+                
+        for k in del_lst:
+            del rec[k]
+        
+        # Write the values to the output CSV file
+        out_vals = []
+        for h in orders_header:
+            if h in rec.keys():
+                out_vals.append(rec[h])
+            else:
+                out_vals.append('')
+        orders_csv.write('%s\n' % ','.join(out_vals))
+    
 def send_orders(in_res, session=None, user=None, password=None):
     """
     Sends a POST request to the RAPI in order to order images.
@@ -218,6 +276,7 @@ def send_orders(in_res, session=None, user=None, password=None):
         
         return order_res.json()
     except Exception as err:
+        traceback.print_exc(file=sys.stdout)
         return err
  
 def run(user, password, in_fn):
@@ -347,7 +406,7 @@ def run(user, password, in_fn):
             
             if end_i > len(cur_recs): end_i = len(cur_recs)
             
-            print("\nSending orders for records %s to %s..." % (i + 1, end_i))
+            print("\nSending order for records %s to %s..." % (i + 1, end_i))
             
             if len(cur_recs) < i + 100:
                 sub_recs = cur_recs[i:]
@@ -357,47 +416,22 @@ def run(user, password, in_fn):
             # Send the order requests to the RAPI
             order_res = send_orders(sub_recs, session, timeout)
             
-            if isinstance(order_res, requests.exceptions.ReadTimeout) or \
-                isinstance(order_res, json.JSONDecodeError):
+            #print("order_res: %s" % type(order_res))
+            
+            if not isinstance(order_res, dict):
                 print("WARNING: An error occurred while sending the order:")
                 print(order_res)
+                log_orders(sub_recs, order_res, orders_csv, orders_header, \
+                            True)
                 continue
             
             #print("order_res: %s" % order_res)
             order_ids.append(order_res['items'][0]['orderId'])
-            for rec in sub_recs:
-                
-                # Get the order info for the current record
-                order_info = None
-                if order_res is not None:
-                    for o in order_res['items']:
-                        if o['recordId'] == rec[id_col]:
-                            rec['Order ID'] = o['orderId']
-                            rec['Order Item ID'] = o['itemId']
-                            rec['Order Status'] = o['status']
-                            cov_time = datetime.datetime.now()
-                            rec['Time Ordered'] = cov_time.strftime(\
-                                                    "%Y%m%d_%H%M%S")
             
-                # Write record to CSV
-                del_lst = []
-                for k in rec.keys():
-                    if k not in orders_header:
-                        del_lst.append(k)
-                        
-                for k in del_lst:
-                    del rec[k]
+            #print("sub_recs: %s" % sub_recs)
+            log_orders(sub_recs, order_res, orders_csv, orders_header)
                 
-                # Write the values to the output CSV file
-                out_vals = []
-                for h in orders_header:
-                    if h in rec.keys():
-                        out_vals.append(rec[h])
-                    else:
-                        out_vals.append('')
-                orders_csv.write('%s\n' % ','.join(out_vals))
-                
-            print("Orders sent; Order ID: %s" % sub_recs[0]['Order ID'])
+            print("Order sent successfully; Order ID: %s" % sub_recs[0]['Order ID'])
                 
             order_count += len(order_res['items'])
             
@@ -470,37 +504,8 @@ def run_single(user, password, image_id):
     #print("order_res: %s" % order_res)
     #order_ids.append(order_res['items'][0]['orderId'])
     order_id = order_res['items'][0]['orderId']
-    for rec in recs:
-        
-        # Get the order info for the current record
-        order_info = None
-        if order_res is not None:
-            for o in order_res['items']:
-                if o['recordId'] == rec['Record ID']:
-                    rec['Order ID'] = o['orderId']
-                    rec['Order Item ID'] = o['itemId']
-                    rec['Order Status'] = o['status']
-                    cov_time = datetime.datetime.now()
-                    rec['Time Ordered'] = cov_time.strftime(\
-                                            "%Y%m%d_%H%M%S")
     
-        # Write record to CSV
-        del_lst = []
-        for k in rec.keys():
-            if k not in orders_header:
-                del_lst.append(k)
-                
-        for k in del_lst:
-            del rec[k]
-        
-        # Write the values to the output CSV file
-        out_vals = []
-        for h in orders_header:
-            if h in rec.keys():
-                out_vals.append(rec[h])
-            else:
-                out_vals.append('')
-        orders_csv.write('%s\n' % ','.join(out_vals))
+    log_orders(recs, order_res, orders_csv, orders_header)
         
     order_count += len(order_res['items'])
             
