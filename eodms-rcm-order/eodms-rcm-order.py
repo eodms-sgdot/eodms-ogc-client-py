@@ -359,7 +359,7 @@ def run(user, password, in_fn):
             
             if isinstance(order_res, requests.exceptions.ReadTimeout) or \
                 isinstance(order_res, json.JSONDecodeError):
-                print("An error occurred while sending the order:")
+                print("WARNING: An error occurred while sending the order:")
                 print(order_res)
                 continue
             
