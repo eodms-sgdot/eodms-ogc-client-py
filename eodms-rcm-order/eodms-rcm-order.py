@@ -14,6 +14,9 @@ import getpass
 import urllib.parse
 import json
 
+RAPI_DOMAIN = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca'
+MAX_ORDERS = 100
+
 def get_exception(in_str, output='str'):
     """
     Gets the Exception text (or XML) from an request result.
@@ -79,8 +82,8 @@ def get_fromOrderKey(in_rec, session, timeout=60.0, attempts=4):
     # Create the query with the downlink segment ID
     query = "RCM.DOWNLINK_SEGMENT_ID='%s'" % download_segment_id
     query_enc = urllib.parse.quote(query)
-    query_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/search" \
-                "?collection=RCMImageProducts&query=%s" % query_enc
+    query_url = "%s/wes/rapi/search?collection=RCMImageProducts&query=%s" % \
+                (RAPI_DOMAIN, query_enc)
                 
     print("\nQuery URL: %s" % query_url)
     
@@ -151,7 +154,7 @@ def is_json(my_json):
     try:
         json_object = json.loads(my_json)
     except (ValueError, TypeError) as e:
-        print("e: %s" % e)
+        #print("e: %s" % e)
         return False
     return True
     
@@ -267,12 +270,30 @@ def send_orders(in_res, session=None, user=None, password=None):
         post_json = json.dumps(post_dict)
         
         # Set the RAPI URL
-        order_url = "https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/rapi/order"
+        order_url = "%s/wes/rapi/order" % RAPI_DOMAIN
+        
+        #print("RAPI order URL: %s" % order_url)
+        #print("POST data: %s" % post_json)
         
         # Send the JSON request to the RAPI
-        order_res = session.post(url=order_url, data=post_json)
-                                    
-        #print("order_res: %s" % order_res)
+        try:
+            order_res = session.post(url=order_url, data=post_json)
+            order_res.raise_for_status()
+        except requests.exceptions.HTTPError as errh:
+            return "Http Error: %s" % errh
+        except requests.exceptions.ConnectionError as errc:
+            return "Error Connecting: %s" % errc
+        except requests.exceptions.Timeout as errt:
+            return "Timeout Error: %s" % errt
+        except requests.exceptions.RequestException as err:
+            return "Exception: %s" % err
+        
+        if not order_res.ok:
+            err = get_exception(order_res.text)
+            if isinstance(err, list):
+                return '; '.join(err)
+        
+        #print("order_res: %s" % order_res.text)
         
         return order_res.json()
     except Exception as err:
@@ -400,18 +421,18 @@ def run(user, password, in_fn):
         print("\nTotal records to order: %s" % len(cur_recs))
     
         order_ids = []
-        for i in range(0, len(cur_recs), 100):
+        for i in range(0, len(cur_recs), MAX_ORDERS):
             
-            end_i = i + 100
+            end_i = i + MAX_ORDERS
             
             if end_i > len(cur_recs): end_i = len(cur_recs)
             
             print("\nSending order for records %s to %s..." % (i + 1, end_i))
             
-            if len(cur_recs) < i + 100:
+            if len(cur_recs) < i + MAX_ORDERS:
                 sub_recs = cur_recs[i:]
             else:
-                sub_recs = cur_recs[i:100 + i]
+                sub_recs = cur_recs[i:MAX_ORDERS + i]
             
             # Send the order requests to the RAPI
             order_res = send_orders(sub_recs, session, timeout)
@@ -419,7 +440,7 @@ def run(user, password, in_fn):
             #print("order_res: %s" % type(order_res))
             
             if not isinstance(order_res, dict):
-                print("WARNING: An error occurred while sending the order:")
+                print("\nWARNING: An error occurred while sending the order:")
                 print(order_res)
                 log_orders(sub_recs, order_res, orders_csv, orders_header, \
                             True)
@@ -450,7 +471,8 @@ def run(user, password, in_fn):
             order_count)
     print("  %s" % '\n  '.join(order_ids))
     
-    print("\nYou will receive emails with the download links to these orders.")
+    if order_count > 0:
+        print("\nYou will receive emails with the download links to these orders.")
     
     print("\nA list of results can be found in the CSV file '%s'." \
             % orders_fn)
@@ -537,10 +559,10 @@ def main():
                         'EODMS account used for authentication.')
     parser.add_argument('-p', '--password', help='The password of the ' \
                         'EODMS account used for authentication.')
-    parser.add_argument('-i', '--id', help='The record ID for a single ' \
+    parser.add_argument('-r', '--recordid', help='The record ID for a single ' \
                         'image. If this parameter is entered, only the ' \
                         'image with this ID will be ordered.')
-    parser.add_argument('-f', '--input', help='A CSV file containing a list ' \
+    parser.add_argument('-i', '--input', help='A CSV file containing a list ' \
                         'of record IDs. The process will only order the ' \
                         'images from this file.\nThe file should contain a ' \
                         'column called "Record ID", "Sequence ID" or "Downlink ' \
@@ -550,10 +572,10 @@ def main():
     
     user = args.username
     password = args.password
-    id = args.id
+    recordid = args.recordid
     in_fn = args.input
     
-    if id is not None:
+    if recordid is not None:
         if user is None:
             user = input("Enter the username for authentication: ")
             if user == '':
@@ -569,7 +591,7 @@ def main():
                 print("Exiting process.")
                 sys.exit(1)
     
-        run_single(user, password, id)
+        run_single(user, password, recordid)
         sys.exit(0)
         
     if user is None:
