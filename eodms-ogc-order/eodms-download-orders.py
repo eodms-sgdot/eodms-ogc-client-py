@@ -58,9 +58,8 @@ def run(session, in_fn):
     
     # Open OrderInfo CSV file and grab the header
     orderinfo_csv = open(in_fn, 'r')
-    in_lines = common.get_lines(orderinfo_csv)
+    orderinfo_lines = common.get_lines(orderinfo_csv)
     
-    orderinfo_lines = orderinfo_csv.readlines()
     orderinfo_header = orderinfo_lines[0].split(',')
     orderinfo_header = [h.strip('\n') for h in orderinfo_header]
     
