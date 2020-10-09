@@ -46,6 +46,21 @@ import common
 
 RAPI_DOMAIN = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca'
 
+def download_image(url, session, dest_fn):
+    
+    auth = session.auth
+    
+    user = auth[0]
+    pwd = auth[1]
+    
+    pass_man = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    pass_man.add_password(None, url, user, pwd)
+    authhandler = urllib.request.HTTPBasicAuthHandler(pass_man)
+    opener = urllib.request.build_opener(authhandler)
+    urllib.request.install_opener(opener)
+    
+    urllib.request.urlretrieve(url, dest_fn)
+
 def run(session, in_fn):
     '''
     Runs the process for downloading images already ordered
@@ -139,6 +154,8 @@ def run(session, in_fn):
             dests = img['destinations']
             download_paths = []
             for d in dests:
+                print("d: %s" % d)
+                
                 # Get the string value of the destination
                 str_val = d['stringValue']
                 str_val = str_val.replace('</br>', '')
@@ -148,21 +165,24 @@ def run(session, in_fn):
                 url = root.text
                 fn = os.path.basename(url)
                 
-                # Download the image
-                print("\nDownloading link for Record ID %s: %s" % \
-                        (record_id, url))
-                resp = session.get(url)
-                
                 if not os.path.exists('downloads'):
                     os.mkdir('downloads')
                 
-                # Save the image contents to the 'downloads' folder
+                # Download the image
+                print("\nDownloading link for Record ID %s: %s" % \
+                        (record_id, url))
+                # resp = session.get(url)
+                
+                # # Save the image contents to the 'downloads' folder
                 out_fn = "downloads\\%s" % fn
-                out_f = open(out_fn, 'wb')
-                full_path = os.path.realpath(out_f.name)
-                #print("full_path: %s" % full_path)
-                out_f.write(resp.content)
-                out_f.close()
+                full_path = os.path.realpath(out_fn)
+                # out_f = open(out_fn, 'wb')
+                # full_path = os.path.realpath(out_f.name)
+                # #print("full_path: %s" % full_path)
+                # out_f.write(resp.content)
+                # out_f.close()
+                
+                download_image(url, session, out_fn)
                 
                 # Record the URL and downloaded file to a dictionary
                 dest_info = {}

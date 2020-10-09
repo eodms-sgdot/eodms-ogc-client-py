@@ -332,10 +332,11 @@ class Orderer:
             elif 'Record ID' in in_rec.keys():
                 # If the Record ID is in the image dictionary, return it
                 return in_rec
-            if 'Image Id' in in_rec.keys():
-                # If the Image ID is in the image dictionary,
+            if 'Order Key' in in_rec.keys():
+                # If the Order Key is in the image dictionary,
                 #   use it to query the RAPI
-                query = "RSAT2.IMAGE_ID='%s'" % in_rec['Image Id']
+                order_key = in_rec['Order Key']
+                query = "ARCHIVE_IMAGE.ORDER_KEY='%s'" % order_key
                 query_enc = urllib.parse.quote(query)
                 query_url = "%s/wes/rapi/search?collection=%s&query=%s" % \
                             (RAPI_DOMAIN, collection, query_enc)
