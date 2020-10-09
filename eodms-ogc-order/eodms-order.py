@@ -44,9 +44,6 @@ import common
 
 RAPI_DOMAIN = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca'
 
-# For DEBUG:
-# RAPI_DOMAIN = 'http://www-pre-prod.eodms.services.global.gc.ca'
-
 MAX_ORDERS = 100
 
 class Orderer:
