@@ -13,6 +13,8 @@ def main():
     lower_corner = '-76.3556 44.9617'
     upper_corner = '-75.2466 45.5371'
     end_date = '2013-03-29Z'
+    
+    print("\nGetting records from the CSW...")
 
     # Submit a GetRecords to the CSW
     post_xml = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -89,6 +91,9 @@ def main():
                   for u in url_query.split('&')}
     collection_id = query_items['collectionId']
     
+    print("\nChecking (Describing) Coverage for image with Record ID %s " \
+            "from the WCS..." % rec_id)
+    
     # Submit a DescribeCoverage GET request to the WCS using the record 
     #   and collection IDs
     wcs_url = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca/wes/services/WESOrder/' \
@@ -104,6 +109,9 @@ def main():
     wcs_desccov = session.get(url=wcs_url)
     
     if wcs_desccov.status_code == 200:
+        
+        print("\nGetting Coverage for image with Record ID %s from the WCS..." % \
+            rec_id)
     
         cov_id = '%s--%s' % (collection_id, rec_id)
     
@@ -122,6 +130,10 @@ def main():
 </wcs:GetCoverage>''' % cov_id
 
         wcs_getcov = session.post(url=wcs_url, data=getcov_post)
+        
+    elif wcs_desccov.status_code == 401:
+        
+        print("\nUnauthorized access to the WCS.")
 
 if __name__ == '__main__':
     sys.exit(main())

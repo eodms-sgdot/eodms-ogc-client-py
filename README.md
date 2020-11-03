@@ -18,7 +18,7 @@ The only Python package that needs to be installed prior running these scripts i
 
 ## GetRecords POST Request
 
-SET VARIABLES
+### Set Variables
 
 First step is to set the input parameters (restrictions listed above) for the GetRecords request.
 
@@ -31,14 +31,15 @@ upper_corner = '-75.2466 45.5371'
 end_date = '2013-03-29Z'
 ```
 
-CREATE REQUEST XML
+For RCM, remove the ```end_date``` variable as there's no need for a date limit.
+
+### Create XML Request
 
 Next, create the XML POST GetRecords request with the above variables. The request tells the CSW to return the first 15 records based on these variables (or search criteria). NOTE: To change the number of records returned, change the maxRecords attribute in the XML below to the desired value.
 
 GetRecords POST request example:
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
 <csw:GetRecords service='CSW' version='2.0.2'
     maxRecords='15'
     startPosition='1'
@@ -62,7 +63,7 @@ GetRecords POST request example:
                 <ogc:And>
                     <ogc:PropertyIsLessThan>
                         <ogc:PropertyName>dc:date</ogc:PropertyName>
-                        <ogc:Literal>%s</ogc:Literal>
+                        <ogc:Literal>2013-03-29Z</ogc:Literal>
                     </ogc:PropertyIsLessThan>
                     <ogc:PropertyIsLike escapeChar='\\' singleChar='?' 
                         wildCard='*'>
@@ -72,8 +73,8 @@ GetRecords POST request example:
                     <ogc:BBOX>
                         <ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
                         <gml:Envelope>
-                            <gml:lowerCorner>%s</gml:lowerCorner>
-                            <gml:upperCorner>%s</gml:upperCorner>
+                            <gml:lowerCorner>-76.3556 44.9617</gml:lowerCorner>
+                            <gml:upperCorner>-75.2466 45.5371</gml:upperCorner>
                         </gml:Envelope>
                     </ogc:BBOX>
                 </ogc:And>
@@ -81,6 +82,61 @@ GetRecords POST request example:
         </csw:Constraint>
     </csw:Query>
 </csw:GetRecords>
+```
+
+Getting records for RCM images requires authentication using your EODMS credentials and SOAP Envelope XML:
+
+```xml
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+	<soapenv:Header>
+		<wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasisopen.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+			<wsse:UsernameToken xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+				<wsse:Username>eodms-username</wsse:Username>
+				<wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">eodms-password</wsse:Password>
+			</wsse:UsernameToken>
+		</wsse:Security>
+	</soapenv:Header>
+	<soapenv:Body>
+		<csw:GetRecords service='CSW' version='2.0.2'
+			maxRecords='15'
+			startPosition='1'
+			resultType='results'
+			outputFormat='application/xml'
+			outputSchema='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns:csw='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns:ogc='http://www.opengis.net/ogc'
+			xmlns:ows='http://www.opengis.net/ows'
+			xmlns:dc='http://purl.org/dc/elements/1.1/'
+			xmlns:dct='http://purl.org/dc/terms/'
+			xmlns:gml='http://www.opengis.net/gml'
+			xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+			xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
+			http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
+			<csw:Query typeNames='csw:Record'>
+				<csw:ElementSetName typeNames='csw:Record'>full</csw:ElementSetName>
+				<csw:Constraint version="1.1.0">
+					<ogc:Filter>
+						<ogc:And>
+							<ogc:PropertyIsLike escapeChar='\\' singleChar='?' 
+								wildCard='*'>
+								<ogc:PropertyName>dc:title</ogc:PropertyName>
+								<ogc:Literal>*</ogc:Literal>
+							</ogc:PropertyIsLike>
+							<ogc:BBOX>
+								<ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
+								<gml:Envelope>
+									<gml:lowerCorner>-76.3556 44.9617</gml:lowerCorner>
+									<gml:upperCorner>-75.2466 45.5371</gml:upperCorner>
+								</gml:Envelope>
+							</ogc:BBOX>
+						</ogc:And>
+				 </ogc:Filter>
+				</csw:Constraint>
+			</csw:Query>
+		</csw:GetRecords>
+	</soapenv:Body>
+</soapenv:Envelope>
 ```
 
 Python code of request:
@@ -133,13 +189,85 @@ post_xml = '''<?xml version="1.0" encoding="UTF-8"?>
 </csw:GetRecords>''' % (end_date, lower_corner, upper_corner)
 ```
 
-SEND THE REQUEST
+Python code for RCM requests:
 
-The next step is to send the request to the WCS URL. In Python, use the requests object to send a POST request:
+```python
+# Submit a GetRecords to the CSW
+
+post_xml = '''
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+	<soapenv:Header>
+		<wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasisopen.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+			<wsse:UsernameToken xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+				<wsse:Username>eodms-username</wsse:Username>
+				<wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">eodms-password</wsse:Password>
+			</wsse:UsernameToken>
+		</wsse:Security>
+	</soapenv:Header>
+	<soapenv:Body>
+		<csw:GetRecords service='CSW' version='2.0.2'
+			maxRecords='15'
+			startPosition='1'
+			resultType='results'
+			outputFormat='application/xml'
+			outputSchema='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns:csw='http://www.opengis.net/cat/csw/2.0.2'
+			xmlns:ogc='http://www.opengis.net/ogc'
+			xmlns:ows='http://www.opengis.net/ows'
+			xmlns:dc='http://purl.org/dc/elements/1.1/'
+			xmlns:dct='http://purl.org/dc/terms/'
+			xmlns:gml='http://www.opengis.net/gml'
+			xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+			xsi:schemaLocation='http://www.opengis.net/cat/csw/2.0.2
+			http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd'>
+			<csw:Query typeNames='csw:Record'>
+				<csw:ElementSetName typeNames='csw:Record'>full</csw:ElementSetName>
+				<csw:Constraint version="1.1.0">
+					<ogc:Filter>
+						<ogc:And>
+							<ogc:PropertyIsLike escapeChar='\\' singleChar='?' 
+								wildCard='*'>
+								<ogc:PropertyName>dc:title</ogc:PropertyName>
+								<ogc:Literal>*</ogc:Literal>
+							</ogc:PropertyIsLike>
+							<ogc:BBOX>
+								<ogc:PropertyName>ows:BoundingBox</ogc:PropertyName>
+								<gml:Envelope>
+									<gml:lowerCorner>%s</gml:lowerCorner>
+									<gml:upperCorner>%s</gml:upperCorner>
+								</gml:Envelope>
+							</ogc:BBOX>
+						</ogc:And>
+				 </ogc:Filter>
+				</csw:Constraint>
+			</csw:Query>
+		</csw:GetRecords>
+	</soapenv:Body>
+</soapenv:Envelope>''' % (lower_corner, upper_corner)
+```
+
+### Send the Request
+
+The next step is to send the request to the CSW URL.
+
+For RCM, send queries to https://www.eodms-sgdot.nrcan-rncan.gc.ca/MetaManagerCSW/csw/RCMImageProducts.
+
+For all other Radar products, send queries to https://www.eodms-sgdot.nrcan-rncan.gc.ca/MetaManagerCSW/csw/eodms_catalog.
+
+In Python, use the requests object to send a POST request:
 
 ```python
 csw_url = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca/MetaManagerCSW' \
             '/csw/eodms_catalog'
+headers = {'Content-Type':'application/xml'}
+csw_r = requests.post(csw_url, data=post_xml)
+```
+
+Code for RCM request:
+```python
+csw_url = 'https://www.eodms-sgdot.nrcan-rncan.gc.ca/MetaManagerCSW' \
+			'/csw/RCMImageProducts'
 headers = {'Content-Type':'application/xml'}
 csw_r = requests.post(csw_url, data=post_xml)
 ```
@@ -254,7 +382,7 @@ The GetRecords response will contain all the records up to the maxRecords value 
 </GetRecordsResponse>
 ```
 
-EXTRACT RECORD ID AND COLLECTION ID FROM RESPONSE
+### Extract Record ID and Collection ID From Response
 
 Using the GetRecords HTTP response, the record ID and the collection ID can be extracted. The record ID is taken from ```<dc:identifier>``` in the response. The collection ID can be extracted by parsing the URL in the ```<dct:references>```. The next step in the script is to convert the XML response into an ElementTree and get the XML element of the first record (or remove the ```break``` and add each ```rec_element``` to a list to go through each record in the response):
 
@@ -409,7 +537,23 @@ Next, the DescribeCoverage will send back the following response if the request 
 
 If the request was successful, the status code of 200 will be returned with the request and the ```GetCoverage``` operation can be sent to the WCS. A GET request similar to the DescribeCoverage can be sent to the WCS (adding ```format=applicationgml+xml``` to the URL query).
 
-In this case, a POST request is used. For the POST request, the ```CoverageId``` must be in the format of ```<collection></collection>--<record_id></record_id>``` so in this case the CoverageId is ```Radarsat1--1508208```:
+In this case, a POST request is used. For the POST request, the ```CoverageId``` must be in the format of ```[collection]--[record_id]``` so in this case the CoverageId is ```Radarsat1--1508208```:
+
+```xml
+<wcs:GetCoverage
+	xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+	xsi:schemaLocation="http://www.opengis.net/wcs/2.0
+	http://schemas.opengis.net/wcs/2.0/wcsAll.xsd"
+	xmlns="http://www.opengis.net/wcs/2.0"
+	xmlns:wcs="http://www.opengis.net/wcs/2.0"
+	service="WCS"
+	version="2.0.1">
+	<wcs:CoverageId>Radarsat1--5117806</wcs:CoverageId>
+	<wcs:format>application/gml+xml</wcs:format>
+</wcs:GetCoverage>
+```
+
+The Python code should look something like this:
 
 ```python
 if wcs_desccov.status_code == 200:
@@ -430,7 +574,11 @@ if wcs_desccov.status_code == 200:
     <wcs:format>application/gml+xml</wcs:format>
 </wcs:GetCoverage>''' % cov_id
 
-wcs_getcov = session.post(url=wcs_url, data=getcov_post)</pre>
+	wcs_getcov = session.post(url=wcs_url, data=getcov_post)</pre>
+	
+elif wcs_desccov.status_code == 401:
+        
+        print("\nUnauthorized access to the WCS.")
 ```
 
 Once the request has been sent, the user will receive an “EODMS Image Request Submitted Notification” email letting them know that their request has been submitted. Shortly after receiving this email, the user should then receive another email called “EODMS Image Request Delivery Notification” with download links for the specific image.
