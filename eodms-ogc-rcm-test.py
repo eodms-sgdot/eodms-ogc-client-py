@@ -111,8 +111,8 @@ def main():
             collection_id)
     
     # Create a session with authentication
-    username = 'kballan_test' # Replace with your username
-    password = base64.b64decode("Y29teVd3UzMj").decode("utf-8") # Replace with an encoded password
+    username = '########' # Replace with your username
+    password = base64.b64decode("#########").decode("utf-8") # Replace with an encoded password
     
     session = requests.Session()
     session.auth = (username, password)
