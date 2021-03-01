@@ -14,13 +14,13 @@ For this example, the following restrictions will be place on the query:
 
 ## Python Packages
 
-The only Python package that needs to be installed prior running these scripts is the Requests package (https://realpython.com/python-requests/). It can be installed by running the command pip install requests.
+The only Python package that needs to be installed prior running these scripts is the Requests package (https://realpython.com/python-requests/). It can be installed by running the command ```pip install requests```.
 
 ## GetRecords POST Request
 
 ### Set Variables
 
-First step is to set the input parameters (restrictions listed above) for the GetRecords request.
+First step is to set the input parameters (restrictions listed above) for the ```GetRecords``` request.
 
 Python code:
 
