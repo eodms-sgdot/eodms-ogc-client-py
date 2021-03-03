@@ -1,0 +1,1 @@
+The script for accessing the EODMS REST API has now been moved to repository https://github.com/nrcan-eodms-sgdot-rncan/eodms-rapi-orderdownload. Please update your bookmarks and local repositories.
